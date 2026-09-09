@@ -2,6 +2,7 @@
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlparse
+import importlib.util
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,7 +40,33 @@ for route, canonical in EXPECTED.items():
         for metric in ("acquisition_view", "meaningful_page_use", "result_action_"):
             if metric not in source: errors.append(f"{path}: missing event semantic {metric}")
         if 'href="../../"' not in source: errors.append(f"{path}: missing internal home link")
+
+measurement_path = ROOT / "scripts" / "read_measurement.py"
+spec = importlib.util.spec_from_file_location("read_measurement", measurement_path)
+measurement = importlib.util.module_from_spec(spec); spec.loader.exec_module(measurement)
+expected_counters = {
+    ("ddp-2026", "acquisition_view", 1),
+    ("ddp-2026", "meaningful_page_use", 0),
+    ("ddp-2026", "result_action_map", 0),
+    ("ddp-2026", "result_action_official", 0),
+    ("ddp-2026", "result_action_transit", 0),
+    ("seoripul-2026", "acquisition_view", 1),
+    ("seoripul-2026", "meaningful_page_use", 0),
+    ("seoripul-2026", "result_action_parking", 0),
+    ("seoripul-2026", "result_action_official", 0),
+    ("seoripul-2026", "result_action_transit", 0),
+}
+if set(measurement.COUNTERS) != expected_counters:
+    errors.append("measurement helper counter inventory or baseline drifted")
+for page, metric, _ in measurement.COUNTERS:
+    page_source = (ROOT / "seoul-events" / page / "index.html").read_text(encoding="utf-8")
+    semantic = metric if not metric.startswith("result_action_") else f'data-k="{metric.removeprefix("result_action_")}"'
+    if semantic not in page_source:
+        errors.append(f"{page}: measurement helper references undeployed event {metric}")
 if errors:
     print("\n".join(errors), file=sys.stderr); raise SystemExit(1)
-print(f"Validated {len(EXPECTED)} HTML pages: canonical URLs, titles, and internal links OK")
+print(
+    f"Validated {len(EXPECTED)} HTML pages and {len(expected_counters)} "
+    "measurement keys: canonicals, titles, links, semantics, and baselines OK"
+)
 
