@@ -1,6 +1,6 @@
 # MB-001 aggregate measurement reads
 
-This document covers only the two existing production event pages and their already-deployed `hitscounter.dev` targets. It does not add or change instrumentation.
+This document covers only the two existing production event pages and their approved `hitscounter.dev` targets. Issue #23 adds coarse, allow-listed visit-source counters without transmitting a referrer URL, query, identifier, or user-provided value.
 
 ## Read-only procedure
 
@@ -42,7 +42,18 @@ The two acquisition hits occurred on 2026-09-06, before the fixed retest window 
 4. Sum the two net `meaningful_page_use` values for combined meaningful uses.
 5. Sum all six net `result_action_*` values for combined result actions.
 6. Calculate `result actions / acquisition views`; if views are zero, report the rate as unavailable rather than inferring demand.
-7. Apply the unchanged control-plane PASS/ITERATE/STOP thresholds. Keep daily history as the audit trail and report any service/read anomaly as `MEASUREMENT BLOCKED`.
+7. Apply the exposure-aware decision logic in `docs/ACQUISITION.md`. Keep daily history as the audit trail and report any service/read anomaly as `MEASUREMENT BLOCKED`.
+
+## Qualified visit-source attribution added on 2026-09-09
+
+Each event page can now increment one additional once-per-browser source key when the source is confidently recognized:
+
+- search referrer host only: `search_google`, `search_naver`, `search_bing`, or `search_daum`;
+- explicit internal links only: `owned_home` or `owned_related`.
+
+The exact targets use `?metric=acquisition_source_<source>-v2`; all twelve source-counter baselines are zero. Unknown/direct sources are deliberately not guessed. `python scripts/read_measurement.py` reads these counters along with the ten original funnel counters and reports the source totals separately.
+
+These are attributed landing-page visits, not search impressions. The external opportunity-to-be-seen denominator remains unavailable without authorized Search Console, Naver Search Advisor, or Bing Webmaster Tools reporting. A zero source count must therefore be labeled `NO DISTRIBUTION EVIDENCE`, not `NO DEMAND`.
 
 The counter is once-per-browser/page/version, not a verified unique-person measure. Counts are directional aggregate evidence. Do not treat the page load used for live verification as demand; fetch live HTML directly or use a browser profile whose existing localStorage key already prevents another production hit.
 

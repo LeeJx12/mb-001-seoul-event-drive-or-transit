@@ -12,7 +12,7 @@ HISTORY_API = "https://hitscounter.dev/api/history"
 BASE = "https://leejx12.github.io/mb-001-seoul-event-drive-or-transit/seoul-events"
 
 # These keys exactly mirror the already-deployed ?metric=<name>-v2 targets.
-COUNTERS = (
+FUNNEL_COUNTERS = (
     ("ddp-2026", "acquisition_view", 1),
     ("ddp-2026", "meaningful_page_use", 0),
     ("ddp-2026", "result_action_map", 0),
@@ -23,6 +23,21 @@ COUNTERS = (
     ("seoripul-2026", "result_action_parking", 0),
     ("seoripul-2026", "result_action_official", 0),
     ("seoripul-2026", "result_action_transit", 0),
+)
+
+# Coarse, allow-listed attribution only. No referrer URL or user value is sent.
+SOURCE_METRICS = (
+    "acquisition_source_search_google",
+    "acquisition_source_search_naver",
+    "acquisition_source_search_bing",
+    "acquisition_source_search_daum",
+    "acquisition_source_owned_home",
+    "acquisition_source_owned_related",
+)
+COUNTERS = FUNNEL_COUNTERS + tuple(
+    (page, metric, 0)
+    for page in ("ddp-2026", "seoripul-2026")
+    for metric in SOURCE_METRICS
 )
 
 
@@ -56,11 +71,19 @@ def summarize(rows: list[dict]) -> dict:
     views = sum(row["net"] for row in rows if row["metric"] == "acquisition_view")
     meaningful = sum(row["net"] for row in rows if row["metric"] == "meaningful_page_use")
     actions = sum(row["net"] for row in rows if row["metric"].startswith("result_action_"))
+    sources = {
+        metric.removeprefix("acquisition_source_"): sum(
+            row["net"] for row in rows if row["metric"] == metric
+        )
+        for metric in SOURCE_METRICS
+    }
     return {
         "acquisition_views": views,
         "meaningful_page_uses": meaningful,
         "result_actions": actions,
         "result_action_rate": actions / views if views else 0,
+        "attributed_acquisition_visits": sum(sources.values()),
+        "acquisition_sources": sources,
     }
 
 
@@ -78,7 +101,11 @@ def main() -> None:
         print(f"{row['page']}\t{row['metric']}\t{row['total']}\t{row['baseline']}\t{row['net']}")
     print("\ncombined net")
     for key, value in output["combined_net"].items():
-        print(f"{key}: {value:.2%}" if key.endswith("_rate") else f"{key}: {value}")
+        if key == "acquisition_sources":
+            for source, count in value.items():
+                print(f"source_{source}: {count}")
+        else:
+            print(f"{key}: {value:.2%}" if key.endswith("_rate") else f"{key}: {value}")
 
 
 if __name__ == "__main__":
